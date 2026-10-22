@@ -1,0 +1,500 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="description" content="DRIFTLIGHT — Game Protocol Reverse Engineering Lab Pack. Derive an undocumented UDP game protocol from raw packets, then build your own client." />
+    <link rel="icon" href="data:," />
+    <title>DRIFTLIGHT — Game Protocol Reverse Engineering Lab Pack</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800;900&family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet" />
+    <style>
+      :root {
+        --bg: #0a0c0a;
+        --bg-2: #0e110e;
+        --panel: #11140f;
+        --panel-2: #151812;
+        --line: #262b22;
+        --line-bright: #3a4233;
+        --ink: #e8ead9;
+        --ink-dim: #a9ad9c;
+        --ink-faint: #6f7466;
+        --phosphor: #b8e62e;
+        --phosphor-dim: #7fa31f;
+        --amber: #ffb454;
+        --cyan: #6fd3e7;
+        --red: #ff6b5e;
+        --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+        --sans: "Archivo", system-ui, -apple-system, sans-serif;
+      }
+      * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: var(--sans);
+        font-size: 17px;
+        line-height: 1.6;
+        -webkit-font-smoothing: antialiased;
+      }
+      ::selection { background: var(--phosphor); color: #0a0c0a; }
+
+      /* faint hex grid backdrop */
+      .bg-grid {
+        position: fixed; inset: 0; z-index: -1; pointer-events: none;
+        background-image:
+          linear-gradient(var(--line) 1px, transparent 1px),
+          linear-gradient(90deg, var(--line) 1px, transparent 1px);
+        background-size: 56px 56px;
+        opacity: .14;
+        mask-image: radial-gradient(ellipse 90% 60% at 50% 0%, black 30%, transparent 100%);
+        -webkit-mask-image: radial-gradient(ellipse 90% 60% at 50% 0%, black 30%, transparent 100%);
+      }
+
+      .wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+
+      /* ---------- top bar ---------- */
+      .topbar {
+        display: flex; align-items: center; justify-content: space-between;
+        gap: 16px; padding: 18px 0 0;
+        font-family: var(--mono); font-size: 12.5px; letter-spacing: .04em;
+      }
+      .topbar .mark { display: flex; align-items: center; gap: 10px; color: var(--ink); text-decoration: none; font-weight: 600; }
+      .topbar .mark .dot {
+        width: 9px; height: 9px; border-radius: 50%;
+        background: var(--phosphor);
+        box-shadow: 0 0 10px var(--phosphor);
+        animation: blink 2.4s steps(1) infinite;
+      }
+      @keyframes blink { 0%, 88% { opacity: 1; } 92%, 100% { opacity: .25; } }
+      .topbar nav { display: flex; gap: 22px; }
+      .topbar nav a { color: var(--ink-dim); text-decoration: none; }
+      .topbar nav a:hover { color: var(--phosphor); }
+      @media (max-width: 640px) { .topbar nav a.hide-sm { display: none; } }
+
+      /* ---------- hero ---------- */
+      header.hero { padding: 72px 0 40px; }
+      .proto-line {
+        font-family: var(--mono); font-size: 13px; color: var(--ink-faint);
+        letter-spacing: .06em; margin: 0 0 22px;
+      }
+      .proto-line b { color: var(--phosphor); font-weight: 500; }
+      h1.wordmark {
+        margin: 0; font-weight: 900; letter-spacing: .01em;
+        font-size: clamp(38px, 10.5vw, 118px); line-height: .95;
+        text-transform: uppercase; white-space: nowrap;
+      }
+      h1.wordmark .cursor {
+        display: inline-block; width: .52em; height: .82em; margin-left: .06em;
+        background: var(--phosphor); vertical-align: baseline;
+        animation: blink 1.1s steps(1) infinite;
+      }
+      .subtitle {
+        margin: 18px 0 0; font-family: var(--mono); font-size: clamp(15px, 2.4vw, 20px);
+        color: var(--amber); letter-spacing: .02em;
+      }
+      .tagline {
+        margin: 26px 0 0; max-width: 760px;
+        font-size: clamp(21px, 3.4vw, 30px); font-weight: 600; line-height: 1.35;
+      }
+      .tagline em { font-style: normal; color: var(--phosphor); }
+      .supporting { margin: 16px 0 0; max-width: 680px; color: var(--ink-dim); font-size: 17px; }
+      .cta-row { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 36px; }
+      .btn {
+        display: inline-flex; align-items: center; gap: 10px;
+        font-family: var(--mono); font-size: 15px; font-weight: 600;
+        padding: 15px 24px; text-decoration: none; border: 1px solid var(--line-bright);
+        transition: transform .15s ease, background .15s ease, border-color .15s ease;
+      }
+      .btn-primary { background: var(--phosphor); color: #0d1005; border-color: var(--phosphor); }
+      .btn-primary:hover { background: #cbf24e; transform: translateY(-2px); }
+      .btn-ghost { background: transparent; color: var(--ink); }
+      .btn-ghost:hover { border-color: var(--phosphor); color: var(--phosphor); transform: translateY(-2px); }
+      .btn .arr { font-weight: 400; }
+      .cta-note { margin-top: 14px; font-family: var(--mono); font-size: 12.5px; color: var(--ink-faint); }
+
+      /* ---------- hex inspector ---------- */
+      .inspector {
+        margin-top: 56px; border: 1px solid var(--line-bright); background: var(--panel);
+      }
+      .inspector-head {
+        display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px;
+        padding: 12px 18px; border-bottom: 1px solid var(--line);
+        font-family: var(--mono); font-size: 12.5px; color: var(--ink-dim); letter-spacing: .05em;
+      }
+      .inspector-head .file { color: var(--ink); }
+      .inspector-head .live { color: var(--phosphor); }
+      .hexdump {
+        padding: 20px 18px 8px;
+        font-family: var(--mono); font-size: clamp(12.5px, 2.2vw, 15px); line-height: 2;
+      }
+      /* two classic 8-byte rows per line on wide screens; wraps freely on phones */
+      .hexdump .byte:nth-of-type(9)::after,
+      .hexdump .byte:nth-of-type(17)::after { content: "\A"; white-space: pre; }
+      @media (max-width: 640px) {
+        .hexdump .byte:nth-of-type(9)::after,
+        .hexdump .byte:nth-of-type(17)::after { content: none; }
+        .hexdump .ascii { display: block; margin: 6px 0 4px; }
+      }
+      .hexdump .off { color: var(--ink-faint); margin-right: 18px; }
+      .hexdump .ascii { color: var(--ink-faint); margin-left: 18px; letter-spacing: .12em; }
+      .byte {
+        padding: 2px 3px; margin: 0 1px; cursor: pointer; border: 1px solid transparent;
+        color: var(--ink-dim); transition: background .12s, color .12s, border-color .12s;
+      }
+      .byte[data-f="magic"]  { color: var(--phosphor); }
+      .byte[data-f="type"]   { color: var(--amber); }
+      .byte[data-f="seq"]    { color: var(--cyan); }
+      .byte[data-f="body"]   { color: var(--ink); }
+      .byte[data-f="crc"]    { color: var(--red); }
+      .byte:hover, .byte.active { background: #232a1c; border-color: var(--line-bright); color: #fff; }
+      .field-readout {
+        border-top: 1px solid var(--line); padding: 16px 18px 18px;
+        font-family: var(--mono); font-size: 14px; min-height: 74px;
+      }
+      .field-readout .fname { color: var(--phosphor); font-weight: 600; }
+      .field-readout .fdesc { color: var(--ink-dim); display: block; margin-top: 4px; font-size: 13.5px; }
+      .field-readout .hint { color: var(--ink-faint); }
+      .legend {
+        display: flex; flex-wrap: wrap; gap: 8px 20px; padding: 0 18px 16px;
+        font-family: var(--mono); font-size: 12px; color: var(--ink-faint);
+      }
+      .legend span::before { content: "■ "; }
+      .legend .l-magic { color: var(--phosphor); } .legend .l-type { color: var(--amber); }
+      .legend .l-seq { color: var(--cyan); } .legend .l-body { color: var(--ink-dim); }
+      .legend .l-crc { color: var(--red); }
+
+      /* ---------- sections ---------- */
+      section { padding: 72px 0 8px; }
+      .sec-head { display: flex; align-items: baseline; gap: 16px; margin-bottom: 28px; }
+      .sec-head .idx { font-family: var(--mono); font-size: 13px; color: var(--phosphor); }
+      .sec-head h2 {
+        margin: 0; font-size: clamp(26px, 4.4vw, 38px); font-weight: 800; letter-spacing: -.01em;
+      }
+      .sec-head .rule { flex: 1; height: 1px; background: var(--line); align-self: center; }
+      .lede { max-width: 780px; color: var(--ink-dim); font-size: 18px; margin: 0 0 18px; }
+      .lede strong, .lede b { color: var(--ink); font-weight: 600; }
+      .lede .hl { color: var(--phosphor); }
+
+      /* labs */
+      .labs { display: grid; grid-template-columns: 1fr; gap: 14px; }
+      @media (min-width: 760px) { .labs { grid-template-columns: 1fr 1fr; } .lab.free { grid-column: 1 / -1; } }
+      .lab {
+        border: 1px solid var(--line); background: var(--panel); padding: 26px 26px 24px;
+        position: relative;
+      }
+      .lab:hover { border-color: var(--line-bright); }
+      .lab .lab-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+      .lab .lab-no { font-family: var(--mono); font-size: 13px; color: var(--ink-faint); letter-spacing: .08em; }
+      .badge {
+        font-family: var(--mono); font-size: 11.5px; font-weight: 600; letter-spacing: .06em;
+        padding: 3px 9px; border: 1px solid var(--line-bright); color: var(--ink-dim);
+        text-transform: uppercase; white-space: nowrap;
+      }
+      .badge.free { background: var(--phosphor); border-color: var(--phosphor); color: #0d1005; }
+      .lab h3 { margin: 0 0 10px; font-size: 21px; font-weight: 700; line-height: 1.3; }
+      .lab p { margin: 0; color: var(--ink-dim); font-size: 15.5px; }
+      .lab code { font-family: var(--mono); font-size: .92em; color: var(--cyan); }
+
+      /* included */
+      .included {
+        border: 1px solid var(--line); background: var(--panel);
+        padding: 8px 26px; font-family: var(--mono); font-size: 15px;
+      }
+      .included li { padding: 13px 0; border-bottom: 1px dashed var(--line); list-style: none; color: var(--ink-dim); }
+      .included li:last-child { border-bottom: none; }
+      .included li::before { content: "▸ "; color: var(--phosphor); }
+      .included li b { color: var(--ink); font-weight: 500; }
+      ul.included { margin: 0; }
+
+      /* pricing */
+      .price-panel {
+        border: 1px solid var(--phosphor-dim); background: var(--panel-2);
+        padding: 36px 32px; display: grid; gap: 28px;
+      }
+      @media (min-width: 820px) { .price-panel { grid-template-columns: auto 1fr; align-items: center; } }
+      .price-big { font-family: var(--mono); }
+      .price-big .now { font-size: clamp(56px, 9vw, 84px); font-weight: 600; color: var(--phosphor); line-height: 1; }
+      .price-big .was { display: block; margin-top: 8px; color: var(--ink-faint); font-size: 15px; }
+      .price-big .was s { color: var(--ink-dim); }
+      .price-copy p { margin: 0 0 12px; color: var(--ink-dim); max-width: 560px; }
+      .price-copy p b { color: var(--ink); }
+      .price-copy .guarantee { color: var(--ink); font-family: var(--mono); font-size: 14.5px; }
+
+      /* faq */
+      .faq { border-top: 1px solid var(--line); }
+      .faq details { border-bottom: 1px solid var(--line); }
+      .faq summary {
+        cursor: pointer; padding: 20px 4px; font-weight: 600; font-size: 17.5px;
+        list-style: none; display: flex; justify-content: space-between; align-items: center; gap: 16px;
+      }
+      .faq summary::-webkit-details-marker { display: none; }
+      .faq summary::after { content: "+"; font-family: var(--mono); color: var(--phosphor); font-size: 22px; font-weight: 400; }
+      .faq details[open ] summary::after { content: "–"; }
+      .faq summary:hover { color: var(--phosphor); }
+      .faq .a { padding: 0 4px 22px; color: var(--ink-dim); max-width: 760px; margin: 0; }
+
+      .refund-note {
+        margin-top: 36px; border: 1px solid var(--line); background: var(--panel);
+        padding: 22px 26px; color: var(--ink-dim); font-size: 15.5px;
+      }
+      .refund-note b { color: var(--ink); font-family: var(--mono); font-size: 13px; letter-spacing: .06em; text-transform: uppercase; display: block; margin-bottom: 8px; }
+
+      /* footer */
+      footer { margin-top: 88px; border-top: 1px solid var(--line); padding: 34px 0 48px; }
+      footer .foot-grid { display: flex; flex-wrap: wrap; gap: 20px 48px; justify-content: space-between; }
+      footer p { margin: 0; color: var(--ink-faint); font-size: 14px; max-width: 560px; }
+      footer .fname { font-family: var(--mono); color: var(--ink-dim); font-size: 13px; letter-spacing: .05em; margin-bottom: 10px; }
+      footer a { color: var(--ink-dim); }
+      footer a:hover { color: var(--phosphor); }
+
+      @media (prefers-reduced-motion: reduce) {
+        html { scroll-behavior: auto; }
+        .topbar .mark .dot, h1.wordmark .cursor { animation: none; }
+        .btn { transition: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="bg-grid" aria-hidden="true"></div>
+    <div class="wrap">
+
+      <div class="topbar">
+        <a class="mark" href="#top"><span class="dot" aria-hidden="true"></span>DRIFTLIGHT</a>
+        <nav>
+          <a href="#labs">Labs</a>
+          <a href="#included" class="hide-sm">Included</a>
+          <a href="#pricing">Pricing</a>
+          <a href="#faq" class="hide-sm">FAQ</a>
+        </nav>
+      </div>
+
+      <!-- ============ HERO ============ -->
+      <header class="hero" id="top">
+        <p class="proto-line">UDP · <b>1,976 packets captured</b> · no source · no docs</p>
+        <h1 class="wordmark">Driftlight<span class="cursor" aria-hidden="true"></span></h1>
+        <p class="subtitle">Game Protocol Reverse Engineering Lab Pack</p>
+        <p class="tagline">Derive an undocumented UDP game protocol from raw packets — <em>then build your own client.</em></p>
+        <p class="supporting">Five hands-on labs on a real (toy) multiplayer game: capture → dissect → checksum → deobfuscate → Ghidra/Frida → reimplement. No source, no docs — just wires.</p>
+        <div class="cta-row">
+          <a class="btn btn-primary" href="#">Download Lab 1 — Free <span class="arr">↓</span></a>
+          <a class="btn btn-ghost" href="#pricing">Pre-order the full pack — $29 early bird</a>
+        </div>
+        <p class="cta-note">$ lab 1 free · $29 early bird, $59 at launch · full refund if the pack doesn't ship</p>
+
+        <!-- hex inspector -->
+        <div class="inspector" aria-label="Interactive hex dump of a captured DRIFTLIGHT frame">
+          <div class="inspector-head">
+            <span class="file">sample-session.pcap — one frame, annotated</span>
+            <span class="live">● hover / tap the bytes</span>
+          </div>
+          <div class="hexdump" id="hexdump" role="group" aria-label="Frame bytes grouped by field"></div>
+          <div class="legend" aria-hidden="true">
+            <span class="l-magic">magic</span>
+            <span class="l-type">msg type</span>
+            <span class="l-seq">sequence</span>
+            <span class="l-body">payload</span>
+            <span class="l-crc">checksum</span>
+          </div>
+          <div class="field-readout" id="readout" aria-live="polite">
+            <span class="hint">// Every frame in the capture looks like this. Nobody will tell you what the fields mean — that's Lab 1. Hover a byte group to start guessing.</span>
+          </div>
+        </div>
+      </header>
+
+      <!-- ============ WHAT IT IS ============ -->
+      <section id="about">
+        <div class="sec-head"><span class="idx">01</span><h2>What it is</h2><span class="rule"></span></div>
+        <p class="lede">Most reverse-engineering courses point you at malware or crackmes. <strong>Nobody teaches reading an undocumented game protocol off the wire.</strong></p>
+        <p class="lede">DRIFTLIGHT is a tiny multiplayer arena game written for one purpose — <span class="hl">to be reverse engineered</span>. You get the stripped server and client binaries and a recorded session (1,976 packets). No protocol documentation exists.</p>
+        <p class="lede"><strong>You will create it.</strong></p>
+      </section>
+
+      <!-- ============ LABS ============ -->
+      <section id="labs">
+        <div class="sec-head"><span class="idx">02</span><h2>The labs</h2><span class="rule"></span></div>
+        <div class="labs">
+
+          <article class="lab free">
+            <div class="lab-top"><span class="lab-no">LAB 1</span><span class="badge free">Free · available now</span></div>
+            <h3>Capture &amp; Dissect</h3>
+            <p>Frame layout, the 10-message catalogue, <code>HELLO</code> / <code>WELCOME</code> / <code>MOVE</code> / <code>SNAPSHOT</code> formats, and your first Wireshark dissector in Lua.</p>
+          </article>
+
+          <article class="lab">
+            <div class="lab-top"><span class="lab-no">LAB 2</span><span class="badge">In the pack</span></div>
+            <h3>The Checksum</h3>
+            <p>Recover the frame trailer's CRC parameters from black-box data, validate frames in your dissector, forge a valid packet by hand.</p>
+          </article>
+
+          <article class="lab">
+            <div class="lab-top"><span class="lab-no">LAB 3</span><span class="badge">In the pack</span></div>
+            <h3>The Chat Is Not Encrypted, It's Keyed</h3>
+            <p>Prove the chat obfuscation from three ciphertexts of one sentence, find the session key hiding in the handshake, decrypt everything.</p>
+          </article>
+
+          <article class="lab">
+            <div class="lab-top"><span class="lab-no">LAB 4</span><span class="badge">In the pack</span></div>
+            <h3>Into the Binary</h3>
+            <p>The stripped client in Ghidra until the frame builder matches your wire map; Frida hooks on the send path; the session key, live.</p>
+          </article>
+
+          <article class="lab">
+            <div class="lab-top"><span class="lab-no">LAB 5</span><span class="badge">In the pack</span></div>
+            <h3>Become the Client</h3>
+            <p>Reimplement the client from scratch in Python and play against the real server. Author's full spec and source included.</p>
+          </article>
+
+        </div>
+      </section>
+
+      <!-- ============ INCLUDED ============ -->
+      <section id="included">
+        <div class="sec-head"><span class="idx">03</span><h2>What's included</h2><span class="rule"></span></div>
+        <ul class="included">
+          <li><b>Guides</b> — PDF + Markdown</li>
+          <li><b>2 session captures</b> (.pcap)</li>
+          <li><b>Reference Wireshark dissectors</b> (Lua)</li>
+          <li><b>Stripped binaries</b> — client + server, Linux</li>
+          <li><b>Lab 5 starter + solution source</b></li>
+          <li><b>Author's protocol spec</b> (Lab 5)</li>
+          <li><b>All future lab updates</b> for this pack</li>
+        </ul>
+      </section>
+
+      <!-- ============ PRICING ============ -->
+      <section id="pricing">
+        <div class="sec-head"><span class="idx">04</span><h2>Pricing</h2><span class="rule"></span></div>
+        <div class="price-panel">
+          <div class="price-big">
+            <span class="now">$29</span>
+            <span class="was">early-bird pre-order · list price <s>$59</s> at launch</span>
+          </div>
+          <div class="price-copy">
+            <p>The full pack — Labs 2–5 plus everything in Lab 1 — ships <b>lab by lab over ~4 weeks</b> from pre-order open. Lab 1 is free now, so you can judge the material before paying anything.</p>
+            <p class="guarantee">If the pack doesn't ship, every pre-order is refunded in full, automatically.</p>
+            <div class="cta-row" style="margin-top:22px">
+              <a class="btn btn-primary" href="#">Pre-order — $29 early bird</a>
+              <a class="btn btn-ghost" href="#">Download Lab 1 — Free <span class="arr">↓</span></a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ FAQ ============ -->
+      <section id="faq">
+        <div class="sec-head"><span class="idx">05</span><h2>FAQ</h2><span class="rule"></span></div>
+        <div class="faq">
+          <details open>
+            <summary>When does it ship?</summary>
+            <p class="a">Lab by lab over ~4 weeks from pre-order open. Lab 1 is available now, free. If the pack is cancelled, every pre-order is refunded in full.</p>
+          </details>
+          <details>
+            <summary>What do I need?</summary>
+            <p class="a">Basic networking (what UDP is), any hex viewer, Wireshark. Programming starts gently (Lua) and ends at a real Python client.</p>
+          </details>
+          <details>
+            <summary>Windows?</summary>
+            <p class="a">The binaries are Linux ELF — any free VM (or WSL) runs them. A native Windows build is on the roadmap.</p>
+          </details>
+          <details>
+            <summary>Refunds?</summary>
+            <p class="a">Pre-orders: automatic if unshipped. After delivery: 14 days, no questions.</p>
+          </details>
+          <details>
+            <summary>Is this legal?</summary>
+            <p class="a">DRIFTLIGHT is our own game, built as a legal, safe target for learning real protocol reverse-engineering techniques. It is not a course about hacking games you don't own.</p>
+          </details>
+        </div>
+
+        <div class="refund-note">
+          <b>Refund policy</b>
+          Pre-orders are refunded in full automatically if the pack does not ship. Delivered products: 14-day money-back guarantee, no questions asked — contact us through your store order page.
+        </div>
+      </section>
+
+      <!-- ============ FOOTER ============ -->
+      <footer>
+        <div class="foot-grid">
+          <div>
+            <p class="fname">DRIFTLIGHT LAB PACK</p>
+            <p>Digital product sold via Lemon Squeezy and Gumroad (merchant of record; they handle payment and taxes).</p>
+          </div>
+          <div>
+            <p class="fname">SUPPORT</p>
+            <p>Support: via your order page on Lemon Squeezy / Gumroad.</p>
+          </div>
+        </div>
+      </footer>
+
+    </div>
+
+    <script>
+      // ---- Interactive hex dump: one captured frame, grouped by field ----
+      // Field layout mirrors the Lab 1 wire map (magic / type / seq / payload / CRC trailer).
+      var FIELDS = {
+        magic: { name: "MAGIC — bytes 0–1", desc: "Two constant bytes at the head of every frame. In ASCII they spell the game's initials. Constant bytes are how you find frame boundaries in a raw stream." },
+        type:  { name: "MESSAGE TYPE — byte 2", desc: "One byte that says what this frame is. The capture contains exactly 10 distinct values — the full catalogue is Lab 1's first deliverable. This frame is a SNAPSHOT." },
+        seq:   { name: "SEQUENCE — bytes 3–4", desc: "A little-endian counter that increments per frame. Gaps in the sequence are how you spot UDP packet loss in the capture." },
+        body:  { name: "PAYLOAD — bytes 5–20", desc: "Message-specific data. Positions arrive as fixed-point numbers (real value × 32) — you will prove that from the wire in Lab 1, not read it here." },
+        crc:   { name: "CHECKSUM — last 2 bytes", desc: "A CRC trailer computed over everything before it. Its exact parameters are unknown — recovering them from black-box data is all of Lab 2." }
+      };
+      // [hex, field] — a SNAPSHOT-style frame
+      var FRAME = [
+        ["44","magic"],["4C","magic"],
+        ["07","type"],
+        ["A1","seq"],["10","seq"],
+        ["00","body"],["40","body"],["06","body"],["00","body"],
+        ["80","body"],["F2","body"],["03","body"],["00","body"],
+        ["19","body"],["00","body"],["00","body"],["00","body"],
+        ["2C","body"],["01","body"],["00","body"],["00","body"],
+        ["9E","crc"],["C4","crc"]
+      ];
+      var dump = document.getElementById("hexdump");
+      var readout = document.getElementById("readout");
+
+      var line = document.createElement("div");
+      var off = document.createElement("span");
+      off.className = "off"; off.textContent = "0000";
+      line.appendChild(off);
+      FRAME.forEach(function (pair) {
+        var s = document.createElement("span");
+        s.className = "byte"; s.dataset.f = pair[1]; s.textContent = pair[0];
+        s.setAttribute("tabindex", "0");
+        s.setAttribute("role", "button");
+        s.setAttribute("aria-label", FIELDS[pair[1]].name);
+        line.appendChild(s);
+      });
+      var ascii = document.createElement("span");
+      ascii.className = "ascii"; ascii.textContent = "DL..........,....";
+      line.appendChild(ascii);
+      dump.appendChild(line);
+
+      function showField(key) {
+        var f = FIELDS[key];
+        readout.innerHTML = "";
+        var n = document.createElement("span");
+        n.className = "fname"; n.textContent = f.name;
+        var d = document.createElement("span");
+        d.className = "fdesc"; d.textContent = f.desc;
+        readout.appendChild(n); readout.appendChild(d);
+        var bytes = dump.querySelectorAll(".byte");
+        for (var i = 0; i < bytes.length; i++) {
+          bytes[i].classList.toggle("active", bytes[i].dataset.f === key);
+        }
+      }
+      dump.addEventListener("mouseover", function (e) {
+        if (e.target.classList && e.target.classList.contains("byte")) showField(e.target.dataset.f);
+      });
+      dump.addEventListener("click", function (e) {
+        if (e.target.classList && e.target.classList.contains("byte")) showField(e.target.dataset.f);
+      });
+      dump.addEventListener("focusin", function (e) {
+        if (e.target.classList && e.target.classList.contains("byte")) showField(e.target.dataset.f);
+      });
+    </script>
+  </body>
+</html>
